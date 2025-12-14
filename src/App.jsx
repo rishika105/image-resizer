@@ -1,70 +1,128 @@
 import React, { useState, useRef } from "react";
 import { Upload, Download, Info, Zap, Brain } from "lucide-react";
+import ModernAITech from "./components/ModernAITech";
 import { nearestNeighbor } from "./functions/nearestNeighbor";
+import { mitchellResize } from "./functions/mitchell-netravali";
 import { bilinearInterpolation } from "./functions/bilinear";
 import { bicubicInterpolation } from "./functions/bicubic";
 import { lanczosResize } from "./functions/lanczos";
-import ModernAITech from "./components/ModernAITech";
-import TheoryMaths from "./components/TheoryMaths";
+import { boxResize } from "./functions/boxfilter";
 
 const App = () => {
   const [image, setImage] = useState(null);
   const [imageData, setImageData] = useState(null);
-  const [results, setResults] = useState({});
-  const [activeTab, setActiveTab] = useState("algorithms");
+  const [processedData, setProcessedData] = useState(null);
+  const [selectedAlgo, setSelectedAlgo] = useState("nearest");
   const [scale, setScale] = useState(0.5);
+  const [logs, setLogs] = useState([]);
+  const [activeTab, setActiveTab] = useState("algorithms");
   const [processing, setProcessing] = useState(false);
-  const [selectedAlgo, setSelectedAlgo] = useState(null);
 
   const canvasRef = useRef(null);
-  const resultCanvasRefs = useRef({});
+  const processedCanvasRef = useRef(null);
 
   const algorithms = {
     nearest: {
       name: "Nearest Neighbor",
-      complexity: "O(n)",
-      speed: "⚡⚡⚡",
-      quality: "⭐",
-      description: "Simplest algorithm - picks the closest pixel",
-      useCase: "Pixel art, fast previews",
-      technical:
-        "Maps each output pixel to nearest input pixel using floor(x × ratio)",
-      kernel: "None (single pixel)",
-      samples: "1 pixel",
+      speed: "⚡⚡⚡ Lightning Fast",
+      quality: "⭐ Low Quality",
+      complexity: "O(n) - One lookup per pixel",
+      description:
+        "The simplest possible algorithm. For each output pixel, just pick the closest input pixel.",
+      howItWorks:
+        "Maps destination coordinates back to source using simple floor division. If you want pixel (3.7, 2.3), it rounds down to (3, 2) and uses that exact pixel.",
+      visualExample:
+        "Imagine zooming into a photo - you'll see blocky squares because each pixel is just repeated.",
+      mathFormula: "dst[x,y] = src[floor(x×ratio), floor(y×ratio)]",
+      realWorld:
+        'Used in MS Paint\'s "Resize" when you uncheck "Maintain aspect ratio"',
     },
     bilinear: {
       name: "Bilinear Interpolation",
-      complexity: "O(4n)",
-      speed: "⚡⚡",
-      quality: "⭐⭐⭐",
-      description: "Averages 4 surrounding pixels using linear weights",
-      useCase: "General purpose, decent quality",
-      technical: "P = (1-dx)(1-dy)×P1 + dx(1-dy)×P2 + (1-dx)dy×P3 + dx×dy×P4",
-      kernel: "2×2 grid",
-      samples: "4 pixels",
+      speed: "⚡⚡ Fast",
+      quality: "⭐⭐⭐ Good",
+      complexity: "O(4n) - Blends 4 pixels",
+      description:
+        "The balanced choice. Looks at the 4 nearest pixels and creates a weighted average based on distance. Linear in both X and Y directions.",
+      howItWorks:
+        "For each output pixel, finds the 4 surrounding input pixels, calculates how far away each one is, then blends them proportionally. Closer pixels get more weight.",
+
+      visualExample:
+        "Smooth gradients and edges. No more blocky pixels, but fine details might look slightly blurred.",
+      mathFormula: "P = (1-dx)(1-dy)×P₁ + dx(1-dy)×P₂ + (1-dx)dy×P₃ + dx×dy×P₄",
+      realWorld:
+        "Default algorithm in most photo viewers and basic image editors",
     },
     bicubic: {
       name: "Bicubic Interpolation",
-      complexity: "O(16n)",
-      speed: "⚡",
-      quality: "⭐⭐⭐⭐",
-      description: "Uses 16 pixels with cubic polynomial curves",
-      useCase: "High quality photos, smooth gradients",
-      technical: "Cubic convolution kernel with 4×4 neighborhood",
-      kernel: "4×4 grid",
-      samples: "16 pixels",
+      speed: "⚡ Moderate",
+      quality: "⭐⭐⭐⭐ Excellent",
+      complexity: "O(16n) - Uses 4×4 grid",
+      description:
+        "High quality resizing using cubic polynomials. Samples a 4×4 grid of pixels and uses smooth curves instead of straight lines.",
+      howItWorks:
+        "Uses cubic (x³) equations to create smooth curves between pixels. The cubic function allows for natural-looking transitions and preserves detail better than linear interpolation.",
+
+      visualExample:
+        "Very smooth results with good detail preservation. Edges look natural, gradients are silky smooth.",
+      mathFormula:
+        "Uses cubic convolution kernel: w(x) = (a+2)|x|³ - (a+3)|x|² + 1 for |x|≤1",
+      realWorld:
+        'Used in Photoshop\'s "Image Size" dialog, GIMP, professional photo software',
     },
     lanczos: {
       name: "Lanczos3",
-      complexity: "O(36n)",
-      speed: "⚡",
-      quality: "⭐⭐⭐⭐⭐",
-      description: "Industry standard using sinc function",
-      useCase: "Professional photography, printing",
-      technical: "Windowed sinc: (a × sin(πx) × sin(πx/a)) / (πx)²",
-      kernel: "6×6 grid",
-      samples: "36 pixels",
+      speed: "⚡ Slower",
+      quality: "⭐⭐⭐⭐⭐ Best",
+      complexity: "O(36n) - Uses 6×6 grid",
+      description:
+        "The gold standard for image resizing. Uses the sinc function (from signal processing theory) with a 3-lobe Lanczos window. Mathematically optimal for band-limited images.",
+      howItWorks:
+        "Samples a 6×6 grid using the windowed sinc function: sinc(x)×sinc(x/3). This is based on the Shannon-Nyquist sampling theorem - the theoretical perfect reconstruction filter.",
+
+      visualExample:
+        "Sharpest possible result. Preserves fine details, crisp edges, minimal blur. Can introduce slight ringing near high-contrast edges.",
+      mathFormula: "L(x) = sinc(x) × sinc(x/3) where sinc(x) = sin(πx)/(πx)",
+      realWorld:
+        "Industry standard in ImageMagick, used by professional photographers and printers worldwide",
     },
+    mitchell: {
+      name: "Mitchell-Netravali",
+      speed: "⚡⚡ Fast",
+      quality: "⭐⭐⭐⭐ Very Good",
+      complexity: "O(16n) - Uses 4×4 grid",
+      description:
+        "A carefully tuned cubic filter designed to balance sharpness and smoothness. Uses parameters B=1/3, C=1/3 for optimal visual results.",
+      howItWorks:
+        'Like Bicubic but with special parameters that reduce blur while avoiding ringing artifacts. It\'s a "Goldilocks" filter - not too sharp, not too soft.',
+
+      visualExample:
+        "Cleaner than bicubic with less ringing than Lanczos. Excellent for CGI and synthetic images.",
+      mathFormula:
+        "Cubic function with B=1/3, C=1/3: balanced sharpness and minimal artifacts",
+      realWorld:
+        "Used in video games, 3D rendering software, and professional video editing tools",
+    },
+    box: {
+      name: "Box Filter",
+      speed: "⚡⚡⚡ Very Fast",
+      quality: "⭐⭐ Fair (for downscaling)",
+      complexity: "O(variable) - Averages all pixels in box",
+      description:
+        "Simple averaging filter. For downscaling, averages all pixels that map to each output pixel. Very fast and prevents aliasing artifacts.",
+      howItWorks:
+        "Defines a box around each output pixel position and averages all input pixels within that box. Perfect for creating clean thumbnails.",
+
+      visualExample:
+        "When downscaling, produces clean results without moiré patterns. When upscaling, similar to nearest neighbor.",
+      mathFormula: "Average of all pixels within the target box region",
+      realWorld:
+        "Used for thumbnail generation in websites, image CDNs, and content management systems",
+    },
+  };
+
+  const addLog = (msg) => {
+    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   };
 
   const handleImageUpload = (e) => {
@@ -85,74 +143,99 @@ const App = () => {
 
         const imgData = ctx.getImageData(0, 0, img.width, img.height);
         setImageData(imgData);
-        setResults({});
+
+        setLogs([]);
+        addLog(`Image loaded: ${img.width}×${img.height} pixels`);
+        addLog(`Total pixels: ${(img.width * img.height).toLocaleString()}`);
+        addLog(`Raw data size: ${imgData.data.length.toLocaleString()} bytes`);
+        addLog(`Format: RGBA (4 bytes per pixel)`);
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
 
-  const processAllAlgorithms = async () => {
+  const processImage = () => {
     if (!imageData) return;
 
+    setLogs([]);
     setProcessing(true);
-    const newResults = {};
+
+    addLog(`🚀 Starting ${algorithms[selectedAlgo].name} resize...`);
+
+    const startTime = performance.now();
 
     const srcW = imageData.width;
     const srcH = imageData.height;
     const dstW = Math.floor(srcW * scale);
     const dstH = Math.floor(srcH * scale);
 
-    const algos = [
-      { key: "nearest", fn: nearestNeighbor },
-      { key: "bilinear", fn: bilinearInterpolation },
-      { key: "bicubic", fn: bicubicInterpolation },
-      { key: "lanczos", fn: lanczosResize },
-    ];
+    let result;
 
-    for (const algo of algos) {
-      const startTime = performance.now();
-      const result = algo.fn(imageData, srcW, srcH, dstW, dstH);
-      const endTime = performance.now();
-
-      const canvas = document.createElement("canvas");
-      canvas.width = dstW;
-      canvas.height = dstH;
-      const ctx = canvas.getContext("2d");
-      const newImageData = new ImageData(result, dstW, dstH);
-      ctx.putImageData(newImageData, 0, 0);
-
-      newResults[algo.key] = {
-        canvas: canvas,
-        time: (endTime - startTime).toFixed(2),
-        width: dstW,
-        height: dstH,
-      };
+    switch (selectedAlgo) {
+      case "nearest":
+        result = nearestNeighbor(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      case "bilinear":
+        result = bilinearInterpolation(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      case "bicubic":
+        result = bicubicInterpolation(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      case "lanczos":
+        result = lanczosResize(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      case "mitchell":
+        result = mitchellResize(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      case "box":
+        result = boxResize(imageData, srcW, srcH, dstW, dstH, { addLog });
+        break;
+      default:
+        result = nearestNeighbor(imageData, srcW, srcH, dstW, dstH, { addLog });
     }
 
-    setResults(newResults);
+    const endTime = performance.now();
+
+    addLog(
+      `\n⏱️  Total processing time: ${(endTime - startTime).toFixed(2)}ms`
+    );
+    addLog(
+      `📊 Output size: ${dstW}×${dstH} (${(
+        dstW * dstH
+      ).toLocaleString()} pixels)`
+    );
+
+    const canvas = processedCanvasRef.current;
+    canvas.width = dstW;
+    canvas.height = dstH;
+    const ctx = canvas.getContext("2d");
+    const newImageData = new ImageData(result, dstW, dstH);
+    ctx.putImageData(newImageData, 0, 0);
+
+    setProcessedData(newImageData);
     setProcessing(false);
   };
 
-  const downloadResult = (algoKey) => {
-    if (!results[algoKey]) return;
+  const downloadImage = () => {
+    if (!processedCanvasRef.current) return;
 
-    results[algoKey].canvas.toBlob((blob) => {
+    processedCanvasRef.current.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${algoKey}_${scale}x.png`;
+      a.download = `resized_${selectedAlgo}_${scale}x.png`;
       a.click();
       URL.revokeObjectURL(url);
     });
   };
 
+  const algoInfo = algorithms[selectedAlgo];
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold mb-2">
-          Image Resizing 
-        </h1>
+        <h1 className="text-4xl font-bold mb-2">Image Resizing</h1>
         <p className="text-gray-400 mb-8">
           Understanding how every algorithm works from basics to neural networks
         </p>
@@ -168,7 +251,7 @@ const App = () => {
             }`}
           >
             <Zap className="inline mr-2" size={18} />
-            Algorithm Comparison
+            Traditional Algorithms
           </button>
           <button
             onClick={() => setActiveTab("modern")}
@@ -181,56 +264,56 @@ const App = () => {
             <Brain className="inline mr-2" size={18} />
             Modern AI Techniques
           </button>
-          <button
-            onClick={() => setActiveTab("theory")}
-            className={`px-4 py-2 font-medium transition ${
-              activeTab === "theory"
-                ? "text-green-400 border-b-2 border-green-400"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            <Info className="inline mr-2" size={18} />
-            Theory & Mathematics
-          </button>
         </div>
 
         {/* Algorithm Comparison Tab */}
         {activeTab === "algorithms" && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Upload */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              {/* Left: Controls */}
               <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Upload Image</h2>
-
-                <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition mb-4">
-                  <div className="text-center">
-                    <Upload className="mx-auto mb-2" size={32} />
-                    <span className="text-sm text-gray-400">
-                      Click to upload
-                    </span>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                  />
-                </label>
-
-                {image && (
-                  <div className="text-sm text-gray-400">
-                    Original: {image.width} × {image.height} pixels
-                  </div>
-                )}
-              </div>
-
-              {/* Settings */}
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Settings</h2>
+                <h2 className="text-xl font-bold mb-4">Controls</h2>
 
                 <div className="mb-4">
                   <label className="block mb-2 text-sm font-medium">
-                    Scale Factor: {scale}x
+                    Upload Image
+                  </label>
+                  <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition">
+                    <div className="text-center">
+                      <Upload className="mx-auto mb-2" size={32} />
+                      <span className="text-sm text-gray-400">
+                        Click to upload
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
+                  </label>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block mb-2 text-sm font-medium">
+                    Select Algorithm
+                  </label>
+                  <select
+                    value={selectedAlgo}
+                    onChange={(e) => setSelectedAlgo(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  >
+                    {Object.entries(algorithms).map(([key, info]) => (
+                      <option key={key} value={key}>
+                        {info.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block mb-2 text-sm font-medium">
+                    Scale: {scale}x
                   </label>
                   <input
                     type="range"
@@ -247,189 +330,149 @@ const App = () => {
                   </div>
                 </div>
 
-                {image && (
-                  <div className="text-sm text-gray-400 mb-4">
-                    Target: {Math.floor(image.width * scale)} ×{" "}
-                    {Math.floor(image.height * scale)} pixels
-                  </div>
-                )}
+                <button
+                  onClick={processImage}
+                  disabled={!imageData || processing}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition mb-2"
+                >
+                  {processing ? "Processing..." : "Process Image"}
+                </button>
 
                 <button
-                  onClick={processAllAlgorithms}
-                  disabled={!imageData || processing}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition"
+                  onClick={downloadImage}
+                  disabled={!processedData}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition flex items-center justify-center gap-2"
                 >
-                  {processing ? "Processing..." : "Compare All Algorithms"}
+                  <Download size={18} />
+                  Download Result
                 </button>
               </div>
 
-              {/* Original Preview */}
+              {/* Right: Processing Log */}
               <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Original Image</h2>
-                <div className="bg-gray-700 rounded p-4 flex items-center justify-center h-48">
-                  <canvas
-                    ref={canvasRef}
-                    className="max-w-full max-h-full border border-gray-600"
-                  />
+                <h2 className="text-xl font-bold mb-4">Processing Log</h2>
+                <div className="bg-black rounded p-4 h-96 overflow-y-auto font-mono text-xs">
+                  {logs.length === 0 ? (
+                    <div className="text-gray-500">
+                      Upload an image and click "Process Image" to see logs...
+                    </div>
+                  ) : (
+                    logs.map((log, i) => (
+                      <div key={i} className="text-green-400 mb-1">
+                        {log}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Results Grid */}
-            {Object.keys(results).length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {Object.entries(algorithms).map(([key, info]) => (
-                  <div key={key} className="bg-gray-800 rounded-lg p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-blue-400">
-                          {info.name}
-                        </h3>
-                        <p className="text-sm text-gray-400">
-                          {info.description}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setSelectedAlgo(selectedAlgo === key ? null : key)
-                        }
-                        className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition"
-                      >
-                        {selectedAlgo === key ? "Hide" : "Details"}
-                      </button>
-                    </div>
-
-                    {selectedAlgo === key && (
-                      <div className="bg-gray-900 rounded p-4 mb-4 text-sm space-y-2">
-                        <div>
-                          <strong className="text-blue-300">Complexity:</strong>{" "}
-                          {info.complexity}
-                        </div>
-                        <div>
-                          <strong className="text-blue-300">Speed:</strong>{" "}
-                          {info.speed}
-                        </div>
-                        <div>
-                          <strong className="text-blue-300">Quality:</strong>{" "}
-                          {info.quality}
-                        </div>
-                        <div>
-                          <strong className="text-blue-300">Kernel:</strong>{" "}
-                          {info.kernel}
-                        </div>
-                        <div>
-                          <strong className="text-blue-300">Samples:</strong>{" "}
-                          {info.samples}
-                        </div>
-                        <div>
-                          <strong className="text-blue-300">Best for:</strong>{" "}
-                          {info.useCase}
-                        </div>
-                        <div className="pt-2 border-t border-gray-700">
-                          <strong className="text-blue-300">Technical:</strong>
-                          <div className="text-gray-400 mt-1 font-mono text-xs">
-                            {info.technical}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-gray-700 rounded p-4 flex items-center justify-center mb-4 h-64">
-                      {results[key] && (
-                        <canvas
-                          ref={(el) => (resultCanvasRefs.current[key] = el)}
-                          width={results[key].width}
-                          height={results[key].height}
-                          className="max-w-full max-h-full border border-gray-600"
-                          style={{
-                            imageRendering:
-                              key === "nearest" ? "pixelated" : "auto",
-                          }}
-                        />
-                      )}
-                    </div>
-
-                    {results[key] && (
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">
-                          <span className="text-gray-400">
-                            Processing time:{" "}
-                          </span>
-                          <span className="text-green-400 font-bold">
-                            {results[key].time}ms
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => downloadResult(key)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-2 transition"
-                        >
-                          <Download size={14} />
-                          Download
-                        </button>
-                      </div>
-                    )}
+            {/* Image Display */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-bold mb-4">Original Image</h2>
+                <div className="bg-gray-700 rounded p-4 flex items-center justify-center min-h-64">
+                  <canvas
+                    ref={canvasRef}
+                    className="max-w-full h-auto border border-gray-600"
+                  />
+                </div>
+                {image && (
+                  <div className="mt-2 text-sm text-gray-400">
+                    {image.width} × {image.height} pixels
                   </div>
-                ))}
+                )}
               </div>
-            )}
 
-            {/* Algorithm Cards */}
-            {Object.keys(results).length === 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Object.entries(algorithms).map(([key, info]) => (
-                  <div key={key} className="bg-gray-800 rounded-lg p-6">
-                    <h3 className="text-xl font-bold text-blue-400 mb-2">
-                      {info.name}
-                    </h3>
-                    <p className="text-gray-300 mb-4">{info.description}</p>
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-bold mb-4">
+                  Processed Image (Download to visualize properly)
+                </h2>
+                <div className="bg-gray-700 rounded p-4 flex items-center justify-center min-h-64">
+                  <canvas
+                    ref={processedCanvasRef}
+                    className="max-w-full h-auto border border-gray-600"
+                  />
+                </div>
+                {processedData && (
+                  <div className="mt-2 text-sm text-gray-400">
+                    {processedData.width} × {processedData.height} pixels
+                  </div>
+                )}
+              </div>
+            </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                      <div>
-                        <div className="text-gray-400">Complexity</div>
-                        <div className="font-bold">{info.complexity}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-400">Speed</div>
-                        <div className="font-bold">{info.speed}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-400">Quality</div>
-                        <div className="font-bold">{info.quality}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-400">Kernel Size</div>
-                        <div className="font-bold">{info.kernel}</div>
-                      </div>
+            {/* Algorithm Explanation */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <Info className="text-blue-400 mt-1" size={24} />
+                <div>
+                  <h2 className="text-2xl font-bold text-blue-400 mb-1">
+                    {algoInfo.name}
+                  </h2>
+                  <div className="flex gap-4 text-sm text-gray-400 mb-3">
+                    <span>{algoInfo.speed}</span>
+                    <span>•</span>
+                    <span>{algoInfo.quality}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">
+                    📖 What It Is
+                  </h3>
+                  <p className="text-gray-300">{algoInfo.description}</p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">
+                    ⚙️ How It Works
+                  </h3>
+                  <p className="text-gray-300">{algoInfo.howItWorks}</p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">
+                    👁️ Visual Result
+                  </h3>
+                  <p className="text-gray-300">{algoInfo.visualExample}</p>
+                </div>
+
+                <div className="bg-gray-900 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-blue-300 mb-2">
+                    📐 Technical Details
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-gray-400">Complexity:</span>
+                      <span className="text-white ml-2">
+                        {algoInfo.complexity}
+                      </span>
                     </div>
-
-                    <div className="bg-gray-900 rounded p-3 text-xs">
-                      <div className="text-gray-400 mb-1">
-                        Technical Formula:
-                      </div>
-                      <code className="text-green-400">{info.technical}</code>
+                    <div>
+                      <span className="text-gray-400">Formula:</span>
+                      <code className="text-green-400 ml-2 text-xs">
+                        {algoInfo.mathFormula}
+                      </code>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Real-world use:</span>
+                      <span className="text-white ml-2">
+                        {algoInfo.realWorld}
+                      </span>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            )}
+            </div>
           </>
         )}
 
         {/* Modern AI Techniques Tab */}
         {activeTab === "modern" && <ModernAITech />}
-
-        {/* Theory Tab */}
-        {activeTab === "theory" && <TheoryMaths />}
       </div>
-
-      {/* Render results to canvases */}
-      {Object.entries(results).map(([key, data]) => {
-        if (resultCanvasRefs.current[key] && data.canvas) {
-          const ctx = resultCanvasRefs.current[key].getContext("2d");
-          ctx.drawImage(data.canvas, 0, 0);
-        }
-        return null;
-      })}
     </div>
   );
 };
