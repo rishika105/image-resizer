@@ -8,7 +8,6 @@ import { bicubicInterpolation } from "./functions/bicubic";
 import { lanczosResize } from "./functions/lanczos";
 import { boxResize } from "./functions/boxfilter";
 
-
 const App = () => {
   const [image, setImage] = useState(null);
   const [imageData, setImageData] = useState(null);
@@ -178,10 +177,14 @@ const App = () => {
         result = nearestNeighbor(imageData, srcW, srcH, dstW, dstH, { addLog });
         break;
       case "bilinear":
-        result = bilinearInterpolation(imageData, srcW, srcH, dstW, dstH, { addLog });
+        result = bilinearInterpolation(imageData, srcW, srcH, dstW, dstH, {
+          addLog,
+        });
         break;
       case "bicubic":
-        result = bicubicInterpolation(imageData, srcW, srcH, dstW, dstH, { addLog });
+        result = bicubicInterpolation(imageData, srcW, srcH, dstW, dstH, {
+          addLog,
+        });
         break;
       case "lanczos":
         result = lanczosResize(imageData, srcW, srcH, dstW, dstH, { addLog });
