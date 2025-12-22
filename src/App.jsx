@@ -18,11 +18,6 @@ const App = () => {
   const [logs, setLogs] = useState([]);
   const [activeTab, setActiveTab] = useState("algorithms");
   const [processing, setProcessing] = useState(false);
-  const [env, setEnv] = useState(false);
-
-  const handleEnv = () => {
-    setEnv(import.meta.env.VITE_ENV);
-  }
 
   const canvasRef = useRef(null);
   const processedCanvasRef = useRef(null);
@@ -240,11 +235,6 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
-
-       <button onClick={() => handleEnv()} className="text-xl text-white">SHOW ENV</button>
-       {
-        env && <div className="text-5xl text-pink-800">{env}</div>
-       }
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">Image Resizing</h1>
         <p className="text-gray-400 mb-8">
