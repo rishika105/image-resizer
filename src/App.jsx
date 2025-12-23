@@ -240,7 +240,7 @@ const App = () => {
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
 
-      <div>CCICIIDUIUDUUDHUHUDH</div>
+      <div>CCICIIDUIUDUUDHUHUDH HEYYYY</div>
         <h1 className="text-4xl font-bold mb-2">Image Resizing</h1>
         <p className="text-gray-400 mb-8">
           Understanding how every algorithm works from basics to neural networks
